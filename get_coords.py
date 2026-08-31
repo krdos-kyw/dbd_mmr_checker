@@ -1,6 +1,7 @@
 import tkinter as tk
 import os
 import sys
+import ctypes
 
 def resource_path(relative_path):
     try:
@@ -8,6 +9,15 @@ def resource_path(relative_path):
     except Exception:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
+
+# Windows DPI 인식 설정 (모니터 배율이 달라도 정확한 픽셀 좌표 잡기)
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 class CoordinateFinder:
     def __init__(self, root):
@@ -17,7 +27,6 @@ class CoordinateFinder:
         self.root.resizable(False, False)
         self.root.attributes("-topmost", True)
 
-        # 파란색 아이콘 적용
         try:
             self.root.iconbitmap(resource_path('coord_icon.ico'))
         except Exception:
@@ -48,11 +57,25 @@ class CoordinateFinder:
         tk.Label(frame, text="Height (높이):").grid(row=3, column=0, padx=5, pady=2, sticky="e")
         tk.Entry(frame, textvariable=self.height, width=10, state="readonly").grid(row=3, column=1, padx=5, pady=2)
 
+    def get_virtual_screen_geometry(self):
+        # ctypes로 윈도우 다중 모니터 전체 영역(가상 화면) 좌표 계산
+        user32 = ctypes.windll.user32
+        v_left = user32.GetSystemMetrics(76)   # SM_XVIRTUALSCREEN
+        v_top = user32.GetSystemMetrics(77)    # SM_YVIRTUALSCREEN
+        v_width = user32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
+        v_height = user32.GetSystemMetrics(79) # SM_CYVIRTUALSCREEN
+        return v_left, v_top, v_width, v_height
+
     def start_snip(self):
+        v_left, v_top, v_width, v_height = self.get_virtual_screen_geometry()
+
         self.snip_win = tk.Toplevel(self.root)
-        self.snip_win.attributes("-fullscreen", True)
         self.snip_win.attributes("-alpha", 0.3)
-        self.snip_win.config(cursor="cross")
+        self.snip_win.attributes("-topmost", True)
+        self.snip_win.overrideredirect(True)
+
+        # 다중 모니터 전체 영역 덮기
+        self.snip_win.geometry(f"{v_width}x{v_height}+{v_left}+{v_top}")
         
         self.canvas = tk.Canvas(self.snip_win, cursor="cross", bg="gray")
         self.canvas.pack(fill="both", expand=True)
@@ -78,8 +101,11 @@ class CoordinateFinder:
         end_x, end_y = event.x, event.y
         self.snip_win.destroy()
 
-        left = min(self.start_x, end_x)
-        top = min(self.start_y, end_y)
+        v_left, v_top, _, _ = self.get_virtual_screen_geometry()
+
+        # 절대 좌표로 계산 (다중 모니터 음수/양수 좌표 보정)
+        left = min(self.start_x, end_x) + v_left
+        top = min(self.start_y, end_y) + v_top
         width = abs(self.start_x - end_x)
         height = abs(self.start_y - end_y)
 
