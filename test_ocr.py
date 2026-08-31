@@ -10,7 +10,7 @@ pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tessera
 # 아래는 1920x1080 해상도 기준, 대략적인 좌측 하단 영역입니다.
 monitor = {"top": -65, "left": -1862, "width": 13, "height": 24}
 
-with mss.mss() as sct:
+with mss.MSS() as sct:
     print("화면 캡처를 시작합니다...")
     
     # 지정한 영역 캡처 후 OpenCV 배열로 변환
