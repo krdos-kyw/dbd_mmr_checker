@@ -8,9 +8,11 @@ git push -u origin main
 # 2. 파일 생성
 - 좌표 추출기
 pyinstaller -w -F -n "DBD 좌표 추출기" --icon=coord_icon.ico --add-data="coord_icon.ico;." get_coords.py
+py -m PyInstaller -w -F -n "DBD 좌표 추출기" --icon=coord_icon.ico --add-data="coord_icon.ico;." get_coords.py
 
 - mmr checker 생성
 pyinstaller -w -F --icon=icon.ico --add-data="logo.png;." --add-data="icon.ico;." DBD_MMR_Calculator.py
+py -m PyInstaller -w -F --icon=icon.ico --add-data="logo.png;." --add-data="icon.ico;." DBD_MMR_Calculator.py
 
 # 3. 파일 정보
 DBD_MMR_Calculator.py : mmr 계산기 메인 파일

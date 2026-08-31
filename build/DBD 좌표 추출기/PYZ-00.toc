@@ -1,4 +1,4 @@
-('C:\\Users\\MZC01-KRDOS\\Desktop\\git_person\\dbd_checker\\dbd_mmr_checker\\build\\DBD '
+('C:\\Users\\Administrator\\Desktop\\용운\\git_test\\dbd_mmr_checker\\dbd_mmr_checker\\build\\DBD '
  '좌표 추출기\\PYZ-00.pyz',
  [('__future__',
    'C:\\Program Files\\Python314\\Lib\\__future__.py',
