@@ -39,8 +39,8 @@ def load_data():
     default_data = {
         "survivor_mmr": 0, "killer_mmr": 0, 
         "survivor_history": [], "killer_history": [],
-        "ocr_top": 900, "ocr_left": 100, "ocr_width": 100, "ocr_height": 50,
-        "popup_top": 200, "popup_left": 1400, "popup_width": 300, "popup_height": 150
+        "ocr_top": 796, "ocr_left": 157, "ocr_width": 132, "ocr_height": 68,
+        "popup_top": 98, "popup_left": 1683, "popup_width": 194, "popup_height": 209
     }
     if os.path.exists(DATA_FILE):
         try:
@@ -60,50 +60,40 @@ def save_data(data):
     except Exception as e:
         print("데이터 저장 실패:", e)
 
-# --- MMR 계산 로직 ---
 def calculate_survivor_mmr(gen, unhook, heal, chase, is_tunneled, stun, esc):
     score = 0
-    
-    # 1. 발전기 수리 진행도
     if gen >= 300: score += 4
     elif gen >= 200: score += 2
     elif gen >= 150: score += 0
     else: score -= 4
         
-    # 2. 갈고리 구출
     if unhook >= 4: score += 4
     elif unhook == 3: score += 2
     elif unhook == 2: score += 1
     elif unhook == 1: score += 0
     else: score -= 4
         
-    # 3. 타인 치료 진행도
     if heal >= 200: score += 4
     elif heal >= 150: score += 3
     elif heal >= 100: score += 2
     elif heal >= 50: score += 1
     else: score += 0
         
-    # 4. 어그로/피추격 시간 및 터널링 판정
     if is_tunneled:
-        # '터널링 피해자' 체크박스를 켰을 때 연속 터널링 가점 적용
         score += 8
     else:
-        # 끊어서 번 일반 누적 어그로 시간 적용
         if chase >= 120: score += 8
         elif chase >= 90: score += 4
         elif chase >= 60: score += 2
         elif chase >= 30: score += 0
         else: score -= 8
         
-    # 5. 살인마 기절/실명
     if stun >= 4: score += 4
     elif stun == 3: score += 3
     elif stun == 2: score += 2
     elif stun == 1: score += 1
     else: score += 0
         
-    # 6. 탈출 결과
     if esc == "탈출구 (Gate)": score += 8
     elif esc == "개구 (Hatch)": score += 0
     else: score -= 8
@@ -132,10 +122,8 @@ def calculate_killer_mmr(gen_reg, chase, tunnel, kills, hatch, gens_left, esc_co
     
     if hatch: score += 1
 
-    if gens_left in [1, 2, 3, 4, 5]: 
-        score += gens_left
-    else: 
-        score += 0
+    if gens_left in [1, 2, 3, 4, 5]: score += gens_left
+    else: score += 0
 
     escape_penalties = {0: 0, 1: -2, 2: -4, 3: -6, 4: -8}
     score += escape_penalties.get(esc_count, 0)
@@ -146,7 +134,7 @@ class DBDMMRApp:
     def __init__(self, root):
         self.root = root
         self.root.title("데드바이데이라이트 MMR 누적 계산기")
-        self.root.geometry("480x640")
+        self.root.geometry("480x680")
         self.root.resizable(False, False)
 
         try:
@@ -206,8 +194,7 @@ class DBDMMRApp:
 
             def resize_image(event):
                 new_w, new_h = event.width, event.height
-                if new_w < 10 or new_h < 10:
-                    return
+                if new_w < 10 or new_h < 10: return
                 resized_pil = original_pil_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
                 rule_win.tk_img = ImageTk.PhotoImage(resized_pil)
                 canvas.delete("all")
@@ -224,7 +211,7 @@ class DBDMMRApp:
         self.s_unhooks = tk.IntVar(value=0)
         self.s_heal = tk.DoubleVar(value=0)
         self.s_chase = tk.DoubleVar(value=0)
-        self.s_tunneled = tk.BooleanVar(value=False) # 생존자 터널링 체크박스
+        self.s_tunneled = tk.BooleanVar(value=False)
         self.s_stun = tk.IntVar(value=0)
         self.s_escape = tk.StringVar(value="희생/사망 (Sacrificed)")
 
@@ -234,17 +221,16 @@ class DBDMMRApp:
         top_frame = ttk.Frame(self.survivor_frame)
         top_frame.pack(pady=2)
 
-        self.create_input_row(top_frame, "발전기 수리 진행도 (%):", self.s_gen, 0)
+        # 수동으로 되돌린 항목들
+        self.create_input_row(top_frame, "발전기 수리 진행도 (%) [수동]:", self.s_gen, 0)
         self.create_input_row(top_frame, "갈고리 구출 (회) [자동]:", self.s_unhooks, 1)
-        self.create_input_row(top_frame, "타인 치료 진행도 (%):", self.s_heal, 2)
-        self.create_input_row(top_frame, "어그로/피추격 시간 (초):", self.s_chase, 3)
+        self.create_input_row(top_frame, "타인 치료 진행도 (%) [수동]:", self.s_heal, 2)
+        self.create_input_row(top_frame, "어그로/피추격 시간 (초) [수동]:", self.s_chase, 3)
         
-        # 터널링 체크박스 UI 배치
         ttk.Checkbutton(top_frame, text="180초 이상 추격당함 (터널링 피해자)", variable=self.s_tunneled).grid(row=4, column=0, columnspan=2, pady=2)
-
         self.create_input_row(top_frame, "살인마 기절/실명 (회) [자동]:", self.s_stun, 5)
         
-        ttk.Label(top_frame, text="최종 결과:").grid(row=6, column=0, padx=10, pady=2, sticky="e")
+        ttk.Label(top_frame, text="최종 결과 [수동]:").grid(row=6, column=0, padx=10, pady=2, sticky="e")
         escape_cb = ttk.Combobox(top_frame, textvariable=self.s_escape, values=["탈출구 (Gate)", "개구 (Hatch)", "희생/사망 (Sacrificed)"], state="readonly")
         escape_cb.grid(row=6, column=1, padx=10, pady=2, sticky="w")
 
@@ -252,9 +238,9 @@ class DBDMMRApp:
         bottom_frame.pack(fill='x', pady=1)
 
         ttk.Button(bottom_frame, text="누적 점수 반영하기", command=self.apply_survivor_score).pack(pady=2)
-        self.s_result_label = ttk.Label(bottom_frame, text="이번 매치 변동: 0점", font=("Helvetica", 11))
+        self.s_result_label = ttk.Label(bottom_frame, text="이번 매치 변동: 0점", font=("맑은 고딕", 11))
         self.s_result_label.pack(pady=1)
-        self.s_total_label = ttk.Label(bottom_frame, text=f"총 누적 MMR: {self.data['survivor_mmr']}점", font=("Helvetica", 14, "bold"), foreground="blue")
+        self.s_total_label = ttk.Label(bottom_frame, text=f"총 누적 MMR: {self.data['survivor_mmr']}점", font=("맑은 고딕", 14, "bold"), foreground="blue")
         self.s_total_label.pack(pady=2)
         
         btn_frame = ttk.Frame(bottom_frame)
@@ -266,8 +252,7 @@ class DBDMMRApp:
         info_box.pack(fill="x", padx=10, pady=2)
 
         summary_txt = "• 어그로 30초 미만(-8점) & 구출 0회(-4점) 감점 주의!\n• 발전기 150%+ / 어그로 60s+ / 구출 1회+ 목표 권장"
-        ttk.Label(info_box, text=summary_txt, font=("Helvetica", 9), foreground="#333333", justify="left").pack(anchor="w", padx=6, pady=2)
-        
+        ttk.Label(info_box, text=summary_txt, font=("맑은 고딕", 9), foreground="#333333", justify="left").pack(anchor="w", padx=6, pady=2)
         ttk.Button(info_box, text="📖 상세 규칙표 팝업 보기", command=self.open_rule_popup).pack(anchor="e", padx=6, pady=2)
 
         self.update_survivor_preview()
@@ -287,21 +272,21 @@ class DBDMMRApp:
         top_frame = ttk.Frame(self.killer_frame)
         top_frame.pack(pady=2)
 
-        self.create_input_row(top_frame, "발전기 퇴행 진행도 (%):", self.k_gen, 0)
-        self.create_input_row(top_frame, "평균 추격 성공 시간 (초):", self.k_chase, 1)
+        self.create_input_row(top_frame, "발전기 퇴행 진행도 (%) [수동]:", self.k_gen, 0)
+        self.create_input_row(top_frame, "평균 추격 성공 시간 (초) [수동]:", self.k_chase, 1)
         ttk.Checkbutton(top_frame, text="180초 이상 한 명만 추격(터널링)", variable=self.k_tunneling).grid(row=2, column=0, columnspan=2, pady=1)
-        self.create_input_row(top_frame, "희생/처형 생존자 (명):", self.k_kills, 3)
+        self.create_input_row(top_frame, "희생/처형 생존자 (명) [수동]:", self.k_kills, 3)
         ttk.Checkbutton(top_frame, text="마지막 생존자 개구 탈출", variable=self.k_hatch).grid(row=4, column=0, columnspan=2, pady=1)
         self.create_input_row(top_frame, "매치 종료시 남은 발전기 (개) [자동]:", self.k_gens, 5)
-        self.create_input_row(top_frame, "최종 탈출한 생존자 (명):", self.k_escapes, 6)
+        self.create_input_row(top_frame, "최종 탈출한 생존자 (명) [수동]:", self.k_escapes, 6)
 
         bottom_frame = ttk.Frame(self.killer_frame)
         bottom_frame.pack(fill='x', pady=1)
 
         ttk.Button(bottom_frame, text="누적 점수 반영하기", command=self.apply_killer_score).pack(pady=2)
-        self.k_result_label = ttk.Label(bottom_frame, text="이번 매치 변동: 0점", font=("Helvetica", 11))
+        self.k_result_label = ttk.Label(bottom_frame, text="이번 매치 변동: 0점", font=("맑은 고딕", 11))
         self.k_result_label.pack(pady=1)
-        self.k_total_label = ttk.Label(bottom_frame, text=f"총 누적 MMR: {self.data['killer_mmr']}점", font=("Helvetica", 14, "bold"), foreground="purple")
+        self.k_total_label = ttk.Label(bottom_frame, text=f"총 누적 MMR: {self.data['killer_mmr']}점", font=("맑은 고딕", 14, "bold"), foreground="purple")
         self.k_total_label.pack(pady=2)
 
         btn_frame = ttk.Frame(bottom_frame)
@@ -313,8 +298,7 @@ class DBDMMRApp:
         info_box.pack(fill="x", padx=10, pady=2)
 
         summary_txt = "• 빠른 추격 성공(30s 이하 +8점) & 터널링 지양(-8점)\n• 희생자 수(+2~8점) 및 남은 발전기 수(+1~5점) 가점 반영"
-        ttk.Label(info_box, text=summary_txt, font=("Helvetica", 9), foreground="#333333", justify="left").pack(anchor="w", padx=6, pady=2)
-        
+        ttk.Label(info_box, text=summary_txt, font=("맑은 고딕", 9), foreground="#333333", justify="left").pack(anchor="w", padx=6, pady=2)
         ttk.Button(info_box, text="📖 상세 규칙표 팝업 보기", command=self.open_rule_popup).pack(anchor="e", padx=6, pady=2)
 
         self.update_killer_preview()
@@ -325,17 +309,15 @@ class DBDMMRApp:
             unhook = self.s_unhooks.get()
             heal = self.s_heal.get()
             chase = self.s_chase.get()
-            tunneled = self.s_tunneled.get() # 터널링 체크박스 상태값 가져오기
+            tunneled = self.s_tunneled.get()
             stun = self.s_stun.get()
             escape = self.s_escape.get()
 
-            # 입력 수치가 모두 초기화된 상태인지 확인
             if gen == 0 and unhook == 0 and heal == 0 and chase == 0 and not tunneled and stun == 0:
                 self.current_s_score = 0
                 self.s_result_label.config(text="이번 매치 변동: 0점")
                 return
 
-            # 인자 7개를 정확히 매칭하여 계산 함수 호출
             score = calculate_survivor_mmr(gen, unhook, heal, chase, tunneled, stun, escape)
             self.current_s_score = score
             prefix = "+" if score > 0 else ""
@@ -420,42 +402,36 @@ class DBDMMRApp:
                 self.k_total_label.config(text=f"총 누적 MMR: 0점")
 
     def setup_ocr_control_frame(self):
-        ocr_frame = ttk.LabelFrame(self.root, text=" 🤖 실시간 인게임 자동 감지 ")
+        ocr_frame = ttk.LabelFrame(self.root, text=" 🤖 실시간 인게임 자동 감지 영역 설정 ")
         ocr_frame.pack(fill="x", padx=10, pady=2)
 
-        self.ocr_top_var = tk.IntVar(value=self.data.get("ocr_top", 900))
-        self.ocr_left_var = tk.IntVar(value=self.data.get("ocr_left", 100))
-        self.ocr_width_var = tk.IntVar(value=self.data.get("ocr_width", 100))
-        self.ocr_height_var = tk.IntVar(value=self.data.get("ocr_height", 50))
+        self.ocr_top_var = tk.IntVar(value=self.data.get("ocr_top", 796))
+        self.ocr_left_var = tk.IntVar(value=self.data.get("ocr_left", 157))
+        self.ocr_width_var = tk.IntVar(value=self.data.get("ocr_width", 132))
+        self.ocr_height_var = tk.IntVar(value=self.data.get("ocr_height", 68))
 
-        pos_frame = ttk.Frame(ocr_frame)
-        pos_frame.pack(pady=1)
+        self.popup_top_var = tk.IntVar(value=self.data.get("popup_top", 98))
+        self.popup_left_var = tk.IntVar(value=self.data.get("popup_left", 1683))
+        self.popup_width_var = tk.IntVar(value=self.data.get("popup_width", 194))
+        self.popup_height_var = tk.IntVar(value=self.data.get("popup_height", 209))
 
-        ttk.Label(pos_frame, text="발전기 영역 - Top:").grid(row=0, column=0, padx=1)
-        ttk.Entry(pos_frame, textvariable=self.ocr_top_var, width=4).grid(row=0, column=1, padx=1)
-        ttk.Label(pos_frame, text="Left:").grid(row=0, column=2, padx=1)
-        ttk.Entry(pos_frame, textvariable=self.ocr_left_var, width=4).grid(row=0, column=3, padx=1)
-        ttk.Label(pos_frame, text="W:").grid(row=0, column=4, padx=1)
-        ttk.Entry(pos_frame, textvariable=self.ocr_width_var, width=4).grid(row=0, column=5, padx=1)
-        ttk.Label(pos_frame, text="H:").grid(row=0, column=6, padx=1)
-        ttk.Entry(pos_frame, textvariable=self.ocr_height_var, width=4).grid(row=0, column=7, padx=1)
+        # 집게와 게이지 입력란 삭제됨
+        rows = [
+            ("발전기 영역 (숫자)", self.ocr_top_var, self.ocr_left_var, self.ocr_width_var, self.ocr_height_var),
+            ("팝업 영역 (이벤트)", self.popup_top_var, self.popup_left_var, self.popup_width_var, self.popup_height_var)
+        ]
 
-        self.popup_top_var = tk.IntVar(value=self.data.get("popup_top", 200))
-        self.popup_left_var = tk.IntVar(value=self.data.get("popup_left", 1400))
-        self.popup_width_var = tk.IntVar(value=self.data.get("popup_width", 300))
-        self.popup_height_var = tk.IntVar(value=self.data.get("popup_height", 150))
-
-        pop_frame = ttk.Frame(ocr_frame)
-        pop_frame.pack(pady=1)
-
-        ttk.Label(pop_frame, text="팝업 영역 - Top:").grid(row=0, column=0, padx=1)
-        ttk.Entry(pop_frame, textvariable=self.popup_top_var, width=4).grid(row=0, column=1, padx=1)
-        ttk.Label(pop_frame, text="Left:").grid(row=0, column=2, padx=1)
-        ttk.Entry(pop_frame, textvariable=self.popup_left_var, width=4).grid(row=0, column=3, padx=1)
-        ttk.Label(pop_frame, text="W:").grid(row=0, column=4, padx=1)
-        ttk.Entry(pop_frame, textvariable=self.popup_width_var, width=4).grid(row=0, column=5, padx=1)
-        ttk.Label(pop_frame, text="H:").grid(row=0, column=6, padx=1)
-        ttk.Entry(pop_frame, textvariable=self.popup_height_var, width=4).grid(row=0, column=7, padx=1)
+        for i, (label_txt, top, left, w, h) in enumerate(rows):
+            f = ttk.Frame(ocr_frame)
+            f.pack(pady=1)
+            ttk.Label(f, text=f"{label_txt} - Top:").grid(row=0, column=0, padx=1)
+            ttk.Entry(f, textvariable=top, width=4).grid(row=0, column=1, padx=1)
+            ttk.Label(f, text="Left:").grid(row=0, column=2, padx=1)
+            ttk.Entry(f, textvariable=left, width=4).grid(row=0, column=3, padx=1)
+            ttk.Label(f, text="W:").grid(row=0, column=4, padx=1)
+            ttk.Entry(f, textvariable=w, width=4).grid(row=0, column=5, padx=1)
+            ttk.Label(f, text="H:").grid(row=0, column=6, padx=1)
+            ttk.Entry(f, textvariable=h, width=4).grid(row=0, column=7, padx=1)
 
         btn_container = ttk.Frame(ocr_frame)
         btn_container.pack(pady=2)
@@ -477,6 +453,7 @@ class DBDMMRApp:
             self.data["popup_left"] = self.popup_left_var.get()
             self.data["popup_width"] = self.popup_width_var.get()
             self.data["popup_height"] = self.popup_height_var.get()
+
             save_data(self.data)
 
             self.ocr_running = True
@@ -494,15 +471,21 @@ class DBDMMRApp:
         kor_config = r'--psm 6 -l kor'
         
         last_gen = None
-        last_stun_time = 0   # 기절/실명 전용 쿨타임
-        last_unhook_time = 0 # 구출 전용 쿨타임
+        
+        is_unhook_pop_active = False
+        unhook_missing_frames = 0
+
+        # 기절과 실명 스위치 독립 분리
+        is_stun_active = False
+        stun_missing = 0
+        
+        is_blind_active = False
+        blind_missing = 0
 
         with mss.MSS() as sct:
             while self.ocr_running:
                 try:
-                    now = time.time()
-
-                    # 1. 발전기 영역 감지
+                    # 1. 살인마용 남은 발전기 개수 감지
                     gen_monitor = {
                         "top": self.ocr_top_var.get(),
                         "left": self.ocr_left_var.get(),
@@ -519,7 +502,7 @@ class DBDMMRApp:
                             last_gen = val
                             self.root.after(0, lambda v=val: self.k_gens.set(v))
 
-                    # 2. 팝업 영역 감지
+                    # 2. 중앙 우측 팝업 감지 (구출 & 기절 전용)
                     pop_monitor = {
                         "top": self.popup_top_var.get(),
                         "left": self.popup_left_var.get(),
@@ -528,30 +511,65 @@ class DBDMMRApp:
                     }
                     pop_img = np.array(sct.grab(pop_monitor))
                     pop_gray = cv2.cvtColor(pop_img, cv2.COLOR_BGRA2GRAY)
+                    _, pop_thresh = cv2.threshold(pop_gray, 150, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
                     
-                    pop_text_raw = pytesseract.image_to_string(pop_gray, config=kor_config)
-                    pop_text = pop_text_raw.replace(" ", "")
+                    pop_text_raw = pytesseract.image_to_string(pop_thresh, config=kor_config)
+                    pop_text = pop_text_raw.replace(" ", "").replace("\n", "").strip()
 
-                    # A. 살인마 기절 / 실명 감지 (쿨타임 3.5초)
-                    if now - last_stun_time > 3.5:
-                        if any(k in pop_text for k in ["기절", "실명", "판자", "손전등"]):
-                            if "갈고리" not in pop_text and "구출" not in pop_text:
-                                self.root.after(0, lambda: self.s_stun.set(self.s_stun.get() + 1))
-                                last_stun_time = now
+                    # ==========================================
+                    # 💡 갈고리 구출 자동화 로직 강화
+                    # ==========================================
+                    is_safe_unhook = any(k in pop_text for k in ["안전", "인전", "안진", "하게", "하게"])
+                    has_unhook_keyword = any(k in pop_text for k in ["구출", "누출", "갈고리", "갈고", "고리"])
+                    
+                    is_unhook_popup = (not is_safe_unhook) and has_unhook_keyword
 
-                    # B. 갈고리 구출 정밀 감지 (쿨타임 3.5초)
-                    if now - last_unhook_time > 3.5:
-                        # '안전'이라는 단어가 들어간 메세지는 무조건 차단
-                        if "안전" not in pop_text:
-                            # 띄어쓰기 없이 '갈고리구출'이 정확히 포함되거나 '갈고리'와 '구출'이 동시에 존재할 때만 인정
-                            if "갈고리구출" in pop_text or ("갈고리" in pop_text and "구출" in pop_text):
-                                self.root.after(0, lambda: self.s_unhooks.set(self.s_unhooks.get() + 1))
-                                last_unhook_time = now
+                    if is_unhook_popup:
+                        unhook_missing_frames = 0
+                        if not is_unhook_pop_active:
+                            is_unhook_pop_active = True
+                            self.root.after(0, lambda: self.s_unhooks.set(self.s_unhooks.get() + 1))
+                    else:
+                        if is_unhook_pop_active:
+                            unhook_missing_frames += 1
+                            if unhook_missing_frames >= 10:
+                                is_unhook_pop_active = False
+                                unhook_missing_frames = 0
+
+                    # ==========================================
+                    # 💡 기절과 실명 독립 감지 (판자+눈뽕 콤보 완벽 지원)
+                    # ==========================================
+                    
+                    # A. '기절' (판자 스턴 등) 단독 스위치
+                    if "기절" in pop_text and "구출" not in pop_text:
+                        stun_missing = 0
+                        if not is_stun_active:
+                            is_stun_active = True
+                            self.root.after(0, lambda: self.s_stun.set(self.s_stun.get() + 1))
+                    else:
+                        if is_stun_active:
+                            stun_missing += 1
+                            if stun_missing >= 15:
+                                is_stun_active = False
+                                stun_missing = 0
+
+                    # B. '실명' (손전등, 섬광탄 등) 단독 스위치
+                    if "실명" in pop_text and "구출" not in pop_text:
+                        blind_missing = 0
+                        if not is_blind_active:
+                            is_blind_active = True
+                            self.root.after(0, lambda: self.s_stun.set(self.s_stun.get() + 1))
+                    else:
+                        if is_blind_active:
+                            blind_missing += 1
+                            if blind_missing >= 15:
+                                is_blind_active = False
+                                blind_missing = 0
 
                 except Exception as e:
-                    print("OCR 감지 오류:", e)
+                    print("OCR 자동 감지 오류:", e)
                 
-                time.sleep(0.1)
+                time.sleep(0.15)
 
     def create_input_row(self, parent, text, variable, row):
         ttk.Label(parent, text=text).grid(row=row, column=0, padx=10, pady=2, sticky="e")
