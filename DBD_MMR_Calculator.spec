@@ -5,7 +5,7 @@ a = Analysis(
     ['DBD_MMR_Calculator.py'],
     pathex=[],
     binaries=[],
-    datas=[('logo.png', '.'), ('icon.ico', '.')],
+    datas=[('logo.png', '.'), ('icon.ico', '.'), ('rule_info.png', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
