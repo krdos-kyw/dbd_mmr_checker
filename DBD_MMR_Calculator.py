@@ -529,23 +529,22 @@ class DBDMMRApp:
                     pop_img = np.array(sct.grab(pop_monitor))
                     pop_gray = cv2.cvtColor(pop_img, cv2.COLOR_BGRA2GRAY)
                     
-                    # 원본 텍스트 및 공백 제거 텍스트 모두 검사
                     pop_text_raw = pytesseract.image_to_string(pop_gray, config=kor_config)
                     pop_text = pop_text_raw.replace(" ", "")
 
                     # A. 살인마 기절 / 실명 감지 (쿨타임 3.5초)
                     if now - last_stun_time > 3.5:
-                        if any(k in pop_text for k in ["기절", "실명", "판자", "손전등", "살인마"]):
-                            # '갈고리'라는 단어가 섞여서 구출과 오작동하는 것 방지
-                            if "갈고리" not in pop_text:
+                        if any(k in pop_text for k in ["기절", "실명", "판자", "손전등"]):
+                            if "갈고리" not in pop_text and "구출" not in pop_text:
                                 self.root.after(0, lambda: self.s_stun.set(self.s_stun.get() + 1))
                                 last_stun_time = now
 
-                    # B. 갈고리 구출 감지 (쿨타임 3.5초)
+                    # B. 갈고리 구출 정밀 감지 (쿨타임 3.5초)
                     if now - last_unhook_time > 3.5:
-                        if "갈고리" in pop_text or "구출" in pop_text:
-                            # 안전한 구출 중복 방지 (정확히 구출 이벤트일 때만)
-                            if "안전" not in pop_text:
+                        # '안전'이라는 단어가 들어간 메세지는 무조건 차단
+                        if "안전" not in pop_text:
+                            # 띄어쓰기 없이 '갈고리구출'이 정확히 포함되거나 '갈고리'와 '구출'이 동시에 존재할 때만 인정
+                            if "갈고리구출" in pop_text or ("갈고리" in pop_text and "구출" in pop_text):
                                 self.root.after(0, lambda: self.s_unhooks.set(self.s_unhooks.get() + 1))
                                 last_unhook_time = now
 
