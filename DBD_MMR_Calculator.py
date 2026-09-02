@@ -472,14 +472,13 @@ class DBDMMRApp:
         
         last_gen = None
         
-        is_unhook_pop_active = False
-        unhook_missing_frames = 0
-
-        # 기절과 실명 스위치 독립 분리
-        is_stun_active = False
+        active_unhooks = 0
+        unhook_missing = 0
+        
+        active_stuns = 0
         stun_missing = 0
         
-        is_blind_active = False
+        active_blinds = 0
         blind_missing = 0
 
         with mss.MSS() as sct:
@@ -502,7 +501,7 @@ class DBDMMRApp:
                             last_gen = val
                             self.root.after(0, lambda v=val: self.k_gens.set(v))
 
-                    # 2. 중앙 우측 팝업 감지 (구출 & 기절 전용)
+                    # 2. 중앙 우측 팝업 감지
                     pop_monitor = {
                         "top": self.popup_top_var.get(),
                         "left": self.popup_left_var.get(),
@@ -517,54 +516,65 @@ class DBDMMRApp:
                     pop_text = pop_text_raw.replace(" ", "").replace("\n", "").strip()
 
                     # ==========================================
-                    # 💡 갈고리 구출 자동화 로직 강화
+                    # 💡 문자열 필터링 및 개수 정밀 탐지
                     # ==========================================
-                    is_safe_unhook = any(k in pop_text for k in ["안전", "인전", "안진", "하게", "하게"])
-                    has_unhook_keyword = any(k in pop_text for k in ["구출", "누출", "갈고리", "갈고", "고리"])
+                    filtered_text = pop_text.replace("하게", "").replace("안전", "").replace("인전", "")
                     
-                    is_unhook_popup = (not is_safe_unhook) and has_unhook_keyword
+                    detected_unhooks = filtered_text.count("구출") + filtered_text.count("누출")
+                    detected_stuns = filtered_text.count("기절")
+                    detected_blinds = filtered_text.count("실명")
 
-                    if is_unhook_popup:
-                        unhook_missing_frames = 0
-                        if not is_unhook_pop_active:
-                            is_unhook_pop_active = True
-                            self.root.after(0, lambda: self.s_unhooks.set(self.s_unhooks.get() + 1))
+                    # [디버깅] 검은색 콘솔 창에서 텍스트 인식 상태 실시간 확인
+                    if pop_text:
+                        print(f"[OCR] 인식: '{pop_text}' | 구출: {detected_unhooks} | 기절: {detected_stuns} | 실명: {detected_blinds}")
+
+                    # ==========================================
+                    # A. 갈고리 구출 스택
+                    # ==========================================
+                    if detected_unhooks > active_unhooks:
+                        added = detected_unhooks - active_unhooks
+                        self.root.after(0, lambda a=added: self.s_unhooks.set(self.s_unhooks.get() + a))
+                        active_unhooks = detected_unhooks
+                        unhook_missing = 0
+                    elif detected_unhooks < active_unhooks:
+                        unhook_missing += 1
+                        if unhook_missing >= 3:
+                            active_unhooks = detected_unhooks
+                            unhook_missing = 0
                     else:
-                        if is_unhook_pop_active:
-                            unhook_missing_frames += 1
-                            if unhook_missing_frames >= 10:
-                                is_unhook_pop_active = False
-                                unhook_missing_frames = 0
+                        unhook_missing = 0
 
                     # ==========================================
-                    # 💡 기절과 실명 독립 감지 (판자+눈뽕 콤보 완벽 지원)
+                    # B. 기절 스택 (최적화된 6프레임 대기)
                     # ==========================================
-                    
-                    # A. '기절' (판자 스턴 등) 단독 스위치
-                    if "기절" in pop_text and "구출" not in pop_text:
+                    if detected_stuns > active_stuns:
+                        added = detected_stuns - active_stuns
+                        self.root.after(0, lambda a=added: self.s_stun.set(self.s_stun.get() + a))
+                        active_stuns = detected_stuns
                         stun_missing = 0
-                        if not is_stun_active:
-                            is_stun_active = True
-                            self.root.after(0, lambda: self.s_stun.set(self.s_stun.get() + 1))
+                    elif detected_stuns < active_stuns:
+                        stun_missing += 1
+                        if stun_missing >= 3:  # 약 0.9초 대기
+                            active_stuns = detected_stuns
+                            stun_missing = 0
                     else:
-                        if is_stun_active:
-                            stun_missing += 1
-                            if stun_missing >= 15:
-                                is_stun_active = False
-                                stun_missing = 0
+                        stun_missing = 0
 
-                    # B. '실명' (손전등, 섬광탄 등) 단독 스위치
-                    if "실명" in pop_text and "구출" not in pop_text:
+                    # ==========================================
+                    # C. 실명 스택 (최적화된 3프레임 대기)
+                    # ==========================================
+                    if detected_blinds > active_blinds:
+                        added = detected_blinds - active_blinds
+                        self.root.after(0, lambda a=added: self.s_stun.set(self.s_stun.get() + a))
+                        active_blinds = detected_blinds
                         blind_missing = 0
-                        if not is_blind_active:
-                            is_blind_active = True
-                            self.root.after(0, lambda: self.s_stun.set(self.s_stun.get() + 1))
+                    elif detected_blinds < active_blinds:
+                        blind_missing += 1
+                        if blind_missing >= 3:  # 약 0.45초 대기
+                            active_blinds = detected_blinds
+                            blind_missing = 0
                     else:
-                        if is_blind_active:
-                            blind_missing += 1
-                            if blind_missing >= 15:
-                                is_blind_active = False
-                                blind_missing = 0
+                        blind_missing = 0
 
                 except Exception as e:
                     print("OCR 자동 감지 오류:", e)
