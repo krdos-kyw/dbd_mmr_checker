@@ -11,10 +11,15 @@ import mss
 import cv2
 import numpy as np
 import pytesseract
+import keyboard  # 스톱워치 단축키 감지용
 
 try:
     myappid = 'dbd.mmr.calculator.app.v1'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
+    #윈도우 배율 변경으로 인한 창 크기 수축 방지
+    ctypes.windll.user32.SetProcessDPIAware()
+
 except Exception:
     pass
 
@@ -134,7 +139,8 @@ class DBDMMRApp:
     def __init__(self, root):
         self.root = root
         self.root.title("데드바이데이라이트 MMR 누적 계산기")
-        self.root.geometry("480x680")
+        # 💡 740을 680으로 줄여서 하단 여백 제거
+        self.root.geometry("480x800") 
         self.root.resizable(False, False)
 
         try:
@@ -156,11 +162,21 @@ class DBDMMRApp:
         self.data = load_data()
         self.ocr_running = False
 
+        self.is_chasing = False
+        self.chase_start_time = 0.0
+        self.hotkey_enabled = tk.BooleanVar(value=False)
+        
+        self.current_hotkey = self.data.get("chase_hotkey", "3")
+        try:
+            keyboard.add_hotkey(self.current_hotkey, self.toggle_chase_timer)
+        except:
+            pass
+
         self.current_s_score = 0
         self.current_k_score = 0
 
         self.notebook = ttk.Notebook(root)
-        self.notebook.pack(pady=1, expand=True, fill='both')
+        self.notebook.pack(pady=1, fill='both')
 
         self.survivor_frame = ttk.Frame(self.notebook)
         self.killer_frame = ttk.Frame(self.notebook)
@@ -169,9 +185,107 @@ class DBDMMRApp:
 
         self.setup_survivor_tab()
         self.setup_killer_tab()
+        
+        # 💡 위치 변경: 탭 가이드 바로 아래에 단축키 설정 UI 배치
+        self.setup_hotkey_frame()
         self.setup_ocr_control_frame()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def setup_hotkey_frame(self):
+        # 💡 프레임 이름 변경
+        hk_frame = ttk.LabelFrame(self.root, text=" ⏱️ 추격/어그로 측정 스톱워치 ")
+        hk_frame.pack(fill="x", padx=10, pady=2)
+        
+        self.chase_hotkey_var = tk.StringVar(value=self.current_hotkey)
+        
+        top_row = ttk.Frame(hk_frame)
+        top_row.pack(pady=2)
+        
+        self.hk_btn = ttk.Button(top_row, text=f"현재 단축키: [ {self.current_hotkey} ]", command=self.open_hotkey_popup)
+        self.hk_btn.pack(side="left", padx=5, pady=2)
+        
+        ttk.Checkbutton(top_row, text="인게임 단축키 활성화", variable=self.hotkey_enabled).pack(side="left", padx=5)
+
+        bottom_row = ttk.Frame(hk_frame)
+        bottom_row.pack(pady=2)
+        
+        self.chase_status_label = ttk.Label(bottom_row, text="상태: 대기 중", foreground="gray")
+        self.chase_status_label.pack()
+
+    def open_hotkey_popup(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("단축키 입력")
+        popup.geometry("250x100")
+        popup.resizable(False, False)
+        popup.attributes("-topmost", True)
+        popup.grab_set()
+        popup.focus_force()
+        
+        ttk.Label(popup, text="적용할 키를 누르세요...", font=("맑은 고딕", 11)).pack(expand=True)
+        
+        def on_key_press(event):
+            key = event.keysym.lower()
+            if key in ('shift_l', 'shift_r', 'alt_l', 'alt_r', 'control_l', 'control_r'):
+                return
+                
+            self.chase_hotkey_var.set(key)
+            self.hk_btn.config(text=f"현재 단축키: [ {key} ]")
+            popup.destroy()
+            
+            # 💡 창이 닫히자마자 자동으로 단축키 변경 로직 실행
+            self.update_hotkey()
+            
+        popup.bind("<KeyPress>", on_key_press)
+
+    def update_hotkey(self):
+        new_key = self.chase_hotkey_var.get().strip().lower()
+        if not new_key: return
+        
+        try:
+            keyboard.remove_hotkey(self.current_hotkey)
+        except Exception:
+            pass
+            
+        try:
+            keyboard.add_hotkey(new_key, self.toggle_chase_timer)
+            self.current_hotkey = new_key
+            self.data["chase_hotkey"] = new_key
+            save_data(self.data) 
+            # 💡 거추장스러운 완료 알림창(messagebox) 제거하여 흐름을 매끄럽게 처리
+        except Exception as e:
+            messagebox.showerror("오류", f"지원하지 않는 단축키입니다.\n{e}")
+
+    def toggle_chase_timer(self):
+        if not self.hotkey_enabled.get():
+            return
+            
+        if not self.is_chasing:
+            self.is_chasing = True
+            self.chase_start_time = time.time()
+            
+            # 💡 현재 선택된 탭이 생존자(0)인지 살인마(1)인지 확인하여 메세지 분리
+            current_tab = self.notebook.index(self.notebook.select())
+            status_msg = "상태: 어그로 측정 중..." if current_tab == 0 else "상태: 추격 측정 중..."
+            
+            self.root.after(0, lambda: self.chase_status_label.config(text=status_msg, foreground="orange"))
+        else:
+            self.is_chasing = False
+            duration = time.time() - self.chase_start_time
+            self.root.after(0, lambda d=duration: self.apply_chase_time(d))
+
+    def apply_chase_time(self, duration):
+        # 💡 현재 열려있는 탭에 따라 각각 다른 변수에 시간을 더해줌
+        current_tab = self.notebook.index(self.notebook.select())
+        
+        if current_tab == 0:  # 생존자 탭
+            current_val = self.s_chase.get()
+            self.s_chase.set(round(current_val + duration))
+        else:  # 살인마 탭
+            current_val = self.k_chase.get()
+            self.k_chase.set(round(current_val + duration))
+        
+        self.chase_status_label.config(text="상태: 대기 중", foreground="gray")
 
     def open_rule_popup(self):
         rule_win = tk.Toplevel(self.root)
@@ -221,7 +335,6 @@ class DBDMMRApp:
         top_frame = ttk.Frame(self.survivor_frame)
         top_frame.pack(pady=2)
 
-        # 수동으로 되돌린 항목들
         self.create_input_row(top_frame, "발전기 수리 진행도 (%) [수동]:", self.s_gen, 0)
         self.create_input_row(top_frame, "갈고리 구출 (회) [자동]:", self.s_unhooks, 1)
         self.create_input_row(top_frame, "타인 치료 진행도 (%) [수동]:", self.s_heal, 2)
@@ -415,7 +528,6 @@ class DBDMMRApp:
         self.popup_width_var = tk.IntVar(value=self.data.get("popup_width", 194))
         self.popup_height_var = tk.IntVar(value=self.data.get("popup_height", 209))
 
-        # 집게와 게이지 입력란 삭제됨
         rows = [
             ("발전기 영역 (숫자)", self.ocr_top_var, self.ocr_left_var, self.ocr_width_var, self.ocr_height_var),
             ("팝업 영역 (이벤트)", self.popup_top_var, self.popup_left_var, self.popup_width_var, self.popup_height_var)
@@ -524,10 +636,6 @@ class DBDMMRApp:
                     detected_stuns = filtered_text.count("기절")
                     detected_blinds = filtered_text.count("실명")
 
-                    # [디버깅] 검은색 콘솔 창에서 텍스트 인식 상태 실시간 확인
-                    if pop_text:
-                        print(f"[OCR] 인식: '{pop_text}' | 구출: {detected_unhooks} | 기절: {detected_stuns} | 실명: {detected_blinds}")
-
                     # ==========================================
                     # A. 갈고리 구출 스택
                     # ==========================================
@@ -577,7 +685,7 @@ class DBDMMRApp:
                         blind_missing = 0
 
                 except Exception as e:
-                    print("OCR 자동 감지 오류:", e)
+                    pass
                 
                 time.sleep(0.15)
 
