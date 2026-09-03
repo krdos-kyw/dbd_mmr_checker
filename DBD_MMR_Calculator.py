@@ -168,8 +168,8 @@ class DBDMMRApp:
         
         self.current_hotkey = self.data.get("chase_hotkey", "3")
         try:
-            keyboard.add_hotkey(self.current_hotkey, self.toggle_chase_timer)
-        except:
+            keyboard.on_press_key(self.current_hotkey, lambda e: self.toggle_chase_timer())
+        except Exception:
             pass
 
         self.current_s_score = 0
@@ -242,17 +242,18 @@ class DBDMMRApp:
         new_key = self.chase_hotkey_var.get().strip().lower()
         if not new_key: return
         
+        # 💡 기존 후킹 해제
         try:
-            keyboard.remove_hotkey(self.current_hotkey)
+            keyboard.unhook_all_hotkeys()
         except Exception:
             pass
             
         try:
-            keyboard.add_hotkey(new_key, self.toggle_chase_timer)
+            # 💡 단독 조합 제한이 있는 add_hotkey 대신, 다른 키와 조합되어도 반응하는 on_press_key 사용
+            keyboard.on_press_key(new_key, lambda e: self.toggle_chase_timer())
             self.current_hotkey = new_key
             self.data["chase_hotkey"] = new_key
-            save_data(self.data) 
-            # 💡 거추장스러운 완료 알림창(messagebox) 제거하여 흐름을 매끄럽게 처리
+            save_data(self.data)
         except Exception as e:
             messagebox.showerror("오류", f"지원하지 않는 단축키입니다.\n{e}")
 
@@ -625,19 +626,18 @@ class DBDMMRApp:
                     _, pop_thresh = cv2.threshold(pop_gray, 150, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
                     
                     pop_text_raw = pytesseract.image_to_string(pop_thresh, config=kor_config)
-                    pop_text = pop_text_raw.replace(" ", "").replace("\n", "").strip()
+                    pop_text_clean = pop_text_raw.replace(" ", "").replace("\n", "").strip()
 
                     # ==========================================
-                    # 💡 문자열 필터링 및 개수 정밀 탐지
+                    # 💡 키워드 정밀 타격 매칭 ('안전하게 구출' 중복 차단)
                     # ==========================================
-                    filtered_text = pop_text.replace("하게", "").replace("안전", "").replace("인전", "")
-                    
-                    detected_unhooks = filtered_text.count("구출") + filtered_text.count("누출")
-                    detected_stuns = filtered_text.count("기절")
-                    detected_blinds = filtered_text.count("실명")
+                    # '구출' 단독 매칭 대신 '갈고리'가 붙은 완벽한 문구만 카운트 (오타 '누출' 대응 포함)
+                    detected_unhooks = pop_text_clean.count("갈고리구출") + pop_text_clean.count("갈고리누출")
+                    detected_stuns = pop_text_clean.count("기절")
+                    detected_blinds = pop_text_clean.count("실명")
 
                     # ==========================================
-                    # A. 갈고리 구출 스택
+                    # A. 갈고리 구출 스택 (연속 구출 정상 반영)
                     # ==========================================
                     if detected_unhooks > active_unhooks:
                         added = detected_unhooks - active_unhooks
@@ -646,7 +646,7 @@ class DBDMMRApp:
                         unhook_missing = 0
                     elif detected_unhooks < active_unhooks:
                         unhook_missing += 1
-                        if unhook_missing >= 3:
+                        if unhook_missing >= 4:  # 팝업 사라질 때 약 0.45초 대기
                             active_unhooks = detected_unhooks
                             unhook_missing = 0
                     else:
@@ -662,7 +662,7 @@ class DBDMMRApp:
                         stun_missing = 0
                     elif detected_stuns < active_stuns:
                         stun_missing += 1
-                        if stun_missing >= 3:  # 약 0.9초 대기
+                        if stun_missing >= 3:  # 판자 스턴 화면 흔들림 고려 대기 시간 보정
                             active_stuns = detected_stuns
                             stun_missing = 0
                     else:
@@ -678,7 +678,7 @@ class DBDMMRApp:
                         blind_missing = 0
                     elif detected_blinds < active_blinds:
                         blind_missing += 1
-                        if blind_missing >= 3:  # 약 0.45초 대기
+                        if blind_missing >= 3:
                             active_blinds = detected_blinds
                             blind_missing = 0
                     else:

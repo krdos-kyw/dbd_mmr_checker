@@ -1,12 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
+
+datas = [('logo.png', '.'), ('icon.ico', '.'), ('rule_info.png', '.')]
+binaries = []
+hiddenimports = []
+tmp_ret = collect_all('keyboard')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['DBD_MMR_Calculator.py'],
     pathex=[],
-    binaries=[],
-    datas=[('logo.png', '.'), ('icon.ico', '.'), ('rule_info.png', '.')],
-    hiddenimports=[],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
